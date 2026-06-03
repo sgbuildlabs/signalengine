@@ -12,48 +12,91 @@ interface RunResult {
   traces: string[];
 }
 
-interface SubmittedMission {
-  entity: string;
-  missionType: string;
+interface SubmittedBrief {
+  target: string;
+  situation: string;
+  question: string;
   horizonDays: number;
+  lenses: string[];
 }
 
-const missionLabels: Record<string, string> = {
-  sector_momentum: 'Sector momentum',
-  company_intelligence: 'Company intelligence',
-  career_opportunity: 'Career opportunity',
+const situationLabels: Record<string, string> = {
+  leadership_update: 'brief leadership',
+  planning: 'prepare a planning discussion',
+  customer_watch: 'understand a customer or vendor',
+  workforce: 'think through workforce or career impact',
 };
 
-function signalDirection(score: number) {
-  if (score >= 10) return 'strengthening';
-  if (score <= -10) return 'weakening';
-  return 'mostly flat';
+const questionLabels: Record<string, string> = {
+  momentum: 'Is momentum changing?',
+  risk: 'Is risk building?',
+  opportunity: 'Is opportunity opening?',
+};
+
+const lensLabels: Record<string, string> = {
+  attention: 'Attention',
+  narrative: 'Narrative',
+  risk: 'Risk',
+  demand: 'Demand',
+};
+
+function readoutStrength(score: number) {
+  const abs = Math.abs(score);
+  if (abs >= 25) return score > 0 ? 'clear positive movement' : 'clear negative movement';
+  if (abs >= 10) return score > 0 ? 'early positive movement' : 'early negative movement';
+  return 'no strong movement yet';
 }
 
-function confidenceLabel(confidence: number) {
-  if (confidence >= 0.75) return 'high';
-  if (confidence >= 0.45) return 'medium';
-  return 'low';
+function managementPosture(score: number) {
+  const abs = Math.abs(score);
+  if (abs >= 25) return 'Bring this into the next planning conversation.';
+  if (abs >= 10) return 'Keep it on the weekly watch list.';
+  return 'Monitor for confirmation before escalating.';
 }
 
-function plainTrace(trace: string) {
+function confidenceText(confidence: number) {
+  if (confidence >= 0.75) return 'high enough to brief confidently';
+  if (confidence >= 0.45) return 'moderate; useful for orientation, not a conclusion';
+  return 'low; treat as an early prompt';
+}
+
+function dimensionValues(score: number) {
+  return [
+    {
+      name: 'Market attention',
+      state: score >= 0 ? 'warming' : 'cooling',
+      detail: 'Synthetic attention signals are above the recent baseline.',
+    },
+    {
+      name: 'Evidence strength',
+      state: Math.abs(score) >= 10 ? 'developing' : 'thin',
+      detail: 'This demo has a small evidence set, so the signal stays conservative.',
+    },
+    {
+      name: 'Management risk',
+      state: Math.abs(score) >= 25 ? 'needs review' : 'watch only',
+      detail: 'No action claim is made; this is a prompt for follow-up research.',
+    },
+  ];
+}
+
+function explainTrace(trace: string) {
   if (trace.startsWith('Normalization:')) {
-    return 'A synthetic evidence signal was compared with its recent baseline.';
+    return 'The engine compared one evidence point with a recent baseline.';
   }
   if (trace.startsWith('Composite:')) {
-    return 'The deterministic model combined the signal contributions into one directional score.';
+    return 'The engine combined the evidence into a single directional readout.';
   }
   return trace;
 }
 
 export function RunSandbox() {
   const [result, setResult] = useState<RunResult | null>(null);
-  const [submittedMission, setSubmittedMission] = useState<SubmittedMission | null>(null);
+  const [brief, setBrief] = useState<SubmittedBrief | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const direction = useMemo(() => (result ? signalDirection(result.score) : null), [result]);
-  const confidence = useMemo(() => (result ? confidenceLabel(result.confidence) : null), [result]);
+  const dimensions = useMemo(() => (result ? dimensionValues(result.score) : []), [result]);
 
   async function submitRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,15 +104,22 @@ export function RunSandbox() {
     setError(null);
 
     const formData = new FormData(event.currentTarget);
-    const mission = {
-      entity: String(formData.get('entity') ?? 'NVIDIA'),
-      missionType: String(formData.get('missionType') ?? 'sector_momentum'),
+    const nextBrief: SubmittedBrief = {
+      target: String(formData.get('target') ?? 'NVIDIA'),
+      situation: String(formData.get('situation') ?? 'leadership_update'),
+      question: String(formData.get('question') ?? 'momentum'),
       horizonDays: Number(formData.get('horizonDays') ?? 90),
+      lenses: formData.getAll('lenses').map(String),
     };
+
     const response = await fetch('/api/runs/enqueue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(mission),
+      body: JSON.stringify({
+        entity: nextBrief.target,
+        missionType: nextBrief.question === 'risk' ? 'company_intelligence' : 'sector_momentum',
+        horizonDays: nextBrief.horizonDays,
+      }),
     });
     const payload = await response.json();
     setPending(false);
@@ -80,7 +130,7 @@ export function RunSandbox() {
       return;
     }
 
-    setSubmittedMission(mission);
+    setBrief(nextBrief);
     setResult(payload);
   }
 
@@ -88,88 +138,140 @@ export function RunSandbox() {
     <main className="shell">
       <section className="intro">
         <p className="eyebrow">Signal Engine demo</p>
-        <h1>Turn public evidence into a directional signal.</h1>
+        <h1>A management readout for what may be changing.</h1>
         <p className="lede">
-          This first demo uses synthetic evidence so you can see the scoring flow without accounts, keys, or Supabase.
+          Pick the situation you are preparing for. The engine turns evidence into a plain-language view of momentum,
+          risk, and what to watch next.
         </p>
       </section>
 
       <section className="workspace" aria-label="Signal workspace">
         <form className="run-form" onSubmit={submitRun}>
-          <div>
-            <label htmlFor="entity">What are you watching?</label>
-            <input id="entity" name="entity" defaultValue="NVIDIA" placeholder="Company, sector, career, or theme" />
-          </div>
-
-          <div>
-            <label htmlFor="missionType">What signal do you want?</label>
-            <select id="missionType" name="missionType" defaultValue="sector_momentum">
-              <option value="sector_momentum">Sector momentum</option>
-              <option value="company_intelligence">Company intelligence</option>
-              <option value="career_opportunity">Career opportunity</option>
+          <div className="form-block">
+            <span className="step">1</span>
+            <label htmlFor="situation">What are you trying to prepare?</label>
+            <select id="situation" name="situation" defaultValue="leadership_update">
+              <option value="leadership_update">A leadership update</option>
+              <option value="planning">A planning discussion</option>
+              <option value="customer_watch">A customer or vendor review</option>
+              <option value="workforce">A workforce or career discussion</option>
             </select>
           </div>
 
-          <div>
-            <label htmlFor="horizonDays">Time horizon</label>
-            <select id="horizonDays" name="horizonDays" defaultValue="90">
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="180">180 days</option>
+          <div className="form-block">
+            <span className="step">2</span>
+            <label htmlFor="target">Who or what should we watch?</label>
+            <input id="target" name="target" defaultValue="NVIDIA" placeholder="Company, sector, customer, theme" />
+          </div>
+
+          <div className="form-block">
+            <span className="step">3</span>
+            <label htmlFor="question">What question matters most?</label>
+            <select id="question" name="question" defaultValue="momentum">
+              <option value="momentum">Is momentum changing?</option>
+              <option value="risk">Is risk building?</option>
+              <option value="opportunity">Is opportunity opening?</option>
             </select>
+          </div>
+
+          <div className="form-grid">
+            <div>
+              <label htmlFor="horizonDays">Useful time window</label>
+              <select id="horizonDays" name="horizonDays" defaultValue="90">
+                <option value="30">Near term: 30 days</option>
+                <option value="90">Planning view: 90 days</option>
+                <option value="180">Strategic view: 180 days</option>
+              </select>
+            </div>
+            <fieldset>
+              <legend>Evidence lenses</legend>
+              <label className="check">
+                <input type="checkbox" name="lenses" value="attention" defaultChecked />
+                Attention
+              </label>
+              <label className="check">
+                <input type="checkbox" name="lenses" value="risk" defaultChecked />
+                Risk
+              </label>
+              <label className="check">
+                <input type="checkbox" name="lenses" value="demand" />
+                Demand
+              </label>
+            </fieldset>
           </div>
 
           <button type="submit" disabled={pending}>
-            {pending ? 'Running analysis...' : 'Generate signal'}
+            {pending ? 'Building readout...' : 'Build readout'}
           </button>
         </form>
 
         <aside className="result-panel" aria-live="polite">
-          {!result ? (
+          {!result || !brief ? (
             <div className="empty-state">
-              <h2>Ready for a sample run</h2>
+              <p className="eyebrow">Output preview</p>
+              <h2>A concise readout, not a math report.</h2>
               <p>
-                Generate a signal to see the current view, confidence range, and the evidence trail used by the model.
+                You will see the bottom line, confidence in plain English, what dimensions moved, and what would make
+                the view more or less convincing.
               </p>
             </div>
           ) : (
             <div>
-              <p className="eyebrow">Current view</p>
-              <h2>{direction}</h2>
+              <p className="eyebrow">Management readout</p>
+              <h2>{readoutStrength(result.score)}</h2>
               <p className="summary">
-                {missionLabels[submittedMission?.missionType ?? 'sector_momentum']} for{' '}
-                {submittedMission?.entity ?? 'this target'} is {direction} over{' '}
-                {submittedMission?.horizonDays ?? 90} days. Confidence is {confidence}, with a directional score range
-                from {result.scoreRangeLow.toFixed(1)} to {result.scoreRangeHigh.toFixed(1)}.
+                For {brief.target}, this demo sees {readoutStrength(result.score)} over the next {brief.horizonDays}{' '}
+                days. Use it to {situationLabels[brief.situation]}; the most relevant question is "
+                {questionLabels[brief.question]}"
               </p>
 
-              <div className="metrics">
-                <div>
-                  <span>Score</span>
-                  <strong>{result.score.toFixed(1)}</strong>
-                </div>
+              <div className="callout">
+                <span>Suggested posture</span>
+                <strong>{managementPosture(result.score)}</strong>
+              </div>
+
+              <div className="dimensions" aria-label="Signal dimensions">
+                {dimensions.map((dimension) => (
+                  <article key={dimension.name}>
+                    <span>{dimension.name}</span>
+                    <strong>{dimension.state}</strong>
+                    <p>{dimension.detail}</p>
+                  </article>
+                ))}
+              </div>
+
+              <div className="readout-grid">
                 <div>
                   <span>Confidence</span>
-                  <strong>{confidence}</strong>
+                  <strong>{confidenceText(result.confidence)}</strong>
                 </div>
                 <div>
-                  <span>Range</span>
+                  <span>Selected lenses</span>
                   <strong>
-                    {result.scoreRangeLow.toFixed(1)} to {result.scoreRangeHigh.toFixed(1)}
+                    {brief.lenses.length ? brief.lenses.map((lens) => lensLabels[lens]).join(', ') : 'Core signal'}
                   </strong>
                 </div>
               </div>
 
+              <section className="next-check">
+                <h3>What to check next</h3>
+                <ul>
+                  <li>Look for a second confirming source before presenting this as a trend.</li>
+                  <li>Compare the next run with this one to see whether the movement strengthens or fades.</li>
+                  <li>Ask whether the signal matters for budget, staffing, customer risk, or timing.</li>
+                </ul>
+              </section>
+
               <p className="note">
-                This is directional intelligence, not advice. Storage mode is {result.storageMode}; no external data
-                source is required for this demo.
+                This is directional intelligence, not advice. This demo uses synthetic evidence and runs without a
+                database.
               </p>
 
               <details>
-                <summary>Why did the model say this?</summary>
+                <summary>Show how the engine reached this view</summary>
                 <ul>
                   {result.traces.map((trace) => (
-                    <li key={trace}>{plainTrace(trace)}</li>
+                    <li key={trace}>{explainTrace(trace)}</li>
                   ))}
                 </ul>
               </details>
