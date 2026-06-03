@@ -1,0 +1,8 @@
+.next/
+node_modules/
+.env
+.env.local
+.env.*.local
+.pnpm-store/
+*.tsbuildinfo
+.next-dev.*.log
