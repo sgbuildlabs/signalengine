@@ -4,5 +4,8 @@ node_modules/
 .env.local
 .env.*.local
 .pnpm-store/
+.vercel/
 *.tsbuildinfo
 .next-dev.*.log
+
+.vercel
