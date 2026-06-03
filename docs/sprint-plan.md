@@ -1,5 +1,45 @@
 # Sprint Roadmap (Spec §28 mapped to Vercel + Supabase stack)
 
+## UX Acceleration Track - Signal Cockpit
+Goal:
+- Move Signal Engine from a form-and-result sandbox into an investigative cockpit where users can ask a strategic question, watch evidence assemble, understand conviction, and challenge the conclusion.
+
+Build principles:
+- Ask: support natural-language missions alongside structured controls.
+- Watch: show realtime agent lanes for source collection, partial failures, model phases, and finalization.
+- Understand: make the result instantly scannable with direction, confidence, range, source coverage, and top evidence drivers.
+- Trust: make missing-data penalties, trace-derived rationale, and deterministic-number boundaries visible without overwhelming the main answer.
+- Challenge: let users compare, remove sources, change horizon, isolate source classes, and ask what would change the conclusion.
+
+Immediate build plan:
+- Sprint UX-0: Product Shell
+  - Replace the demo layout with a cockpit: mission composer, live run canvas, insight summary, and recent runs.
+  - Add one-click sample missions for company intelligence, sector momentum, career opportunity, competitor watch, regulatory risk, and innovation pulse.
+- Sprint UX-1: Signal Result Card
+  - Add a primary conviction card with direction badge, confidence meter, score range, storage/source coverage, and top three evidence drivers.
+  - Separate directional intelligence caveats from the primary result so they do not dilute the insight reveal.
+- Sprint UX-2: Realtime Agent Lanes
+  - Pull Phase 5 forward visually using `run_events`.
+  - Render lane states for queued, searching, found, partial, failed, modeling, and done.
+  - Keep partial failures visible while preserving confidence in the run continuing.
+- Sprint UX-3: Evidence Timeline
+  - Convert trace entries into a chronological evidence trail with expandable source cards.
+  - Distinguish observed evidence, model transformation, penalties, and final synthesis.
+- Sprint UX-4: Mission Templates
+  - Turn common jobs into guided templates with sensible defaults and editable assumptions.
+  - Preserve a freeform mission path for expert users.
+- Sprint UX-5: Hypothesis Ledger Preview
+  - Surface strengthening, weakening, stable, and invalidated theses before the full ledger backend is complete.
+  - Show prior vs current confidence when prior runs exist.
+- Sprint UX-6: Interrogation Loop
+  - Add challenge controls: compare two entities, compare two missions, remove a source, show only one source class, change horizon, and reveal what would flip the result.
+
+Definition of done:
+- A first-time user can run a meaningful sample mission in one click.
+- A repeat user can understand the conclusion in under five seconds.
+- Every primary claim can be expanded into traceable evidence.
+- Users can challenge a result without leaving the run page.
+- The UI makes progress, uncertainty, missing data, and source quality legible.
 ## Sprint -1 (Scaffolding/Tooling/CI)
 Build:
 - Next.js App Router baseline (frontend + route handlers)
