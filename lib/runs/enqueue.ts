@@ -2,14 +2,45 @@ import { randomUUID } from 'node:crypto';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { l1Normalize, l5FixedComposite, syntheticSignals } from '@/lib/model-stack/phase0';
 
+export interface SyntheticRunResult {
+  runId: string;
+  score: number;
+  confidence: number;
+  scoreRangeLow: number;
+  scoreRangeHigh: number;
+  storageMode: 'supabase' | 'ephemeral';
+  traces: string[];
+}
+
+function hasSupabaseConfig(): boolean {
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 export async function enqueueSyntheticRun(input: {
   entity: string;
   missionType: string;
   horizonDays: number;
-}) {
-  const supabase = getSupabaseServiceClient();
+}): Promise<SyntheticRunResult> {
   const runId = randomUUID();
   const userId = process.env.SEED_USER_ID ?? '00000000-0000-0000-0000-000000000000';
+  const normalized = l1Normalize(syntheticSignals(input.entity), [10, 12, 14, 16, 18]);
+  const composite = l5FixedComposite(normalized);
+  const scoreRangeLow = composite.score - 5;
+  const scoreRangeHigh = composite.score + 5;
+
+  if (!hasSupabaseConfig()) {
+    return {
+      runId,
+      score: composite.score,
+      confidence: composite.confidence,
+      scoreRangeLow,
+      scoreRangeHigh,
+      storageMode: 'ephemeral',
+      traces: [...normalized.flatMap((s) => s.trace), ...composite.traces],
+    };
+  }
+
+  const supabase = getSupabaseServiceClient();
 
   const { error: runErr } = await supabase.from('runs').insert({
     run_id: runId,
@@ -20,9 +51,6 @@ export async function enqueueSyntheticRun(input: {
     status: 'completed',
   });
   if (runErr) throw runErr;
-
-  const normalized = l1Normalize(syntheticSignals(input.entity), [10, 12, 14, 16, 18]);
-  const composite = l5FixedComposite(normalized);
 
   const signalRows = normalized.map((s) => ({
     signal_id: randomUUID(),
@@ -55,13 +83,21 @@ export async function enqueueSyntheticRun(input: {
     model_name: 'phase0_fixed_composite',
     output_score: composite.score,
     confidence: composite.confidence,
-    score_range_low: composite.score - 5,
-    score_range_high: composite.score + 5,
+    score_range_low: scoreRangeLow,
+    score_range_high: scoreRangeHigh,
     input_features: { synthetic: true },
     explanation_json: { traces: composite.traces },
-    allowed_numbers: [composite.score, composite.confidence, composite.score - 5, composite.score + 5],
+    allowed_numbers: [composite.score, composite.confidence, scoreRangeLow, scoreRangeHigh],
   });
   if (outputErr) throw outputErr;
 
-  return { runId, score: composite.score, confidence: composite.confidence };
+  return {
+    runId,
+    score: composite.score,
+    confidence: composite.confidence,
+    scoreRangeLow,
+    scoreRangeHigh,
+    storageMode: 'supabase',
+    traces: [...normalized.flatMap((s) => s.trace), ...composite.traces],
+  };
 }

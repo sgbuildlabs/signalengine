@@ -5,6 +5,7 @@ Sprint 1 delivers a usable Run Sandbox slice:
 - API endpoint `POST /api/runs/enqueue`.
 - Supabase migration scaffold with RLS on core domain tables.
 - Deterministic Phase 0 math functions and synthetic unit tests.
+- No-Supabase fallback mode: the sandbox returns deterministic results with `storageMode: "ephemeral"` when Supabase env vars are absent.
 
 ## Setup
 ```bash
@@ -12,7 +13,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Fill `.env.local` with your Supabase values.
+Fill `.env.local` with your Supabase values when persistence is needed. The sandbox runs without them.
 
 ## Run
 ```bash
